@@ -1,0 +1,154 @@
+#cloud-config
+repo_update: true
+repo_update: true
+repo_upgrade: all
+
+packages:
+ - httpd
+ - mariadb-server
+ - git
+
+runcmd:
+ - [ sh, -c, "amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2" ]
+ - systemctl start httpd
+ - sudo systemctl enable httpd
+ - [ sh, -c, 'git clone https://github.com/ajaykumar011/cloudformation_files.git /var/www/html/' ]
+ - [ sh, -c, "usermod -a -G apache ec2-user" ]
+ - [ sh, -c, "chown -R ec2-user:apache /var/www" ]
+ - chmod 2775 /var/www
+ - [ find, /var/www, -type, d, -exec, chmod, 2775, {}, \; ]
+ - [ find, /var/www, -type, f, -exec, chmod, 0664, {}, \; ]
+
+ 
+---------------------------------------------------------------------
+User-data example for LAMP and Node
+
+
+#cloud-config
+repo_update: true
+repo_upgrade: all
+
+packages:
+ - httpd
+ - mariadb-server
+ - git
+
+runcmd:
+ - [ sh, -c, "amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2" ]
+ - systemctl start httpd
+ - sudo systemctl enable httpd
+ - [ sh, -c, "usermod -a -G apache ec2-user" ]
+ - [ sh, -c, "chown -R ec2-user:apache /var/www" ]
+ - chmod 2775 /var/www
+ - [ find, /var/www, -type, d, -exec, chmod, 2775, {}, \; ]
+ - [ find, /var/www, -type, f, -exec, chmod, 0664, {}, \; ]
+ - [ sh, -c, 'echo "<?php phpinfo(); ?>" > /var/www/html/phpinfo.php' ]
+ - [ sh, -c, 'instance_id=$(curl http://169.254.169.254/latest/meta-data/instance-id)' ]
+ - [ sh, -c, 'public_hostname=$(curl http://169.254.169.254/latest/meta-data/public-hostname)' ] 
+ - [ sh, -c, 'echo "<h3>I am the instance $instance_id</h3>" > /var/www/html/index.html' ]
+
+
+
+
+-------------------------------------------------------------------
+ 
+ 
+ git clone https://github.com/ajaykumar011/cloudformation_files.git
+ 
+ 
+ ====================
+ 
+ 
+#cloud-config
+repo_update: true
+repo_upgrade: all
+
+packages:
+ - httpd
+ - mariadb-server
+ - git
+
+runcmd:
+ - [ sh, -c, "amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2" ]
+ - systemctl start httpd
+ - sudo systemctl enable httpd
+ - [ sh, -c, "usermod -a -G apache ec2-user" ]
+ - [ sh, -c, "chown -R ec2-user:apache /var/www" ]
+ - chmod 2775 /var/www
+ - [ find, /var/www, -type, d, -exec, chmod, 2775, {}, \; ]
+ - [ find, /var/www, -type, f, -exec, chmod, 0664, {}, \; ]
+ - [ sh, -c, 'echo "<?php phpinfo(); ?>" > /var/www/html/phpinfo.php' ]
+ - [ sh, -c, 'instance_id=$(curl http://169.254.169.254/latest/meta-data/instance-id)' ]
+ - [ sh, -c, 'public_hostname=$(curl http://169.254.169.254/latest/meta-data/public-hostname)' ] 
+ - [ sh, -c, 'echo "<h3>I am the instance $instance_id</h3>" > /var/www/html/index.html' ]
+ - [ sh, -c, 'echo "<h3>My Hostname is : $public_hostname</h3>" >> /var/www/html/index.html' ] 
+ 
+
+
+
+===========================
+
+#!/bin/bash -xe
+
+## Code Deploy Agent Bootstrap Script with LAMP ##
+
+exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+REGION=ap-south-1
+
+yum update -y
+sleep 30
+amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+yum install -y httpd mariadb-server git ruby aws-cli curl unzip wget jq
+cd /tmp/
+wget https://aws-codedeploy-${REGION}.s3.amazonaws.com/latest/install
+chmod +x ./install
+./install auto
+echo "Code Deploy Agent Instalation completed"
+sed -i "s|AllowOverride None|AllowOverride All|g"  /etc/httpd/conf/httpd.conf
+sed -i "s|index.html|index.php|g" /etc/httpd/conf/httpd.conf
+sed -i "s|Listen 80|Listen 0.0.0.0:80|g" /etc/httpd/conf/httpd.conf
+service codedeploy-agent start
+service codedeploy-agent status
+systemctl start httpd
+systemctl enable httpd
+usermod -a -G apache ec2-user
+git clone https://github.com/ajaykumar011/cloudformation_files.git /var/www/html/ && rm -rf /var/www/html/.git*
+chown -R ec2-user:apache /var/www
+chmod 2775 /var/www
+find /var/www -type d -exec chmod 2775 {} \;
+find /var/www -type f -exec chmod 0664 {} \;
+echo "<?php phpinfo(); ?>" > /var/www/html/phpinfo.php
+
+===========================
+#!/bin/bash
+# use this for user data when creating a new ec2 instance to support codedeploy and nodejs
+# output user data logs into a separate place for debugging
+
+exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+# install code deploy agent:
+yum -y update
+yum install -y ruby
+yum install -y aws-cli curl git unzip
+cd /home/ec2-user
+#aws s3 cp s3://aws-codedeploy-us-east-1/latest/install . --region us-east-1
+aws s3 cp s3://aws-codedeploy-ap-south-1/latest/install . --region ap-south-1
+#To get the name above use URL https://docs.aws.amazon.com/codedeploy/latest/userguide/resource-kit.html#resource-kit-bucket-names
+chmod +x ./install
+./install auto
+service codedeploy-agent start
+service codedeploy-agent status
+# install node:
+# get node into yum
+curl --silent --location https://rpm.nodesource.com/setup_14.x | bash -
+# install node (and npm) with yum
+yum -y install nodejs
+#cross-env makes it so you can have a single command without worrying about setting or using the environment variable properly for the platform. 
+#Just set it like you would if it's running on a POSIX system, and cross-env will take care of setting it properly. Installation.
+git clone https://github.com/ajaykumar011/ecs-node-docker.git /home/ec2-user/ecs-node-docker && cd /home/ec2-user/ecs-node-docker && sudo rm -rf .git .gitignore
+
+sudo npm i cross-env g
+npm i express g
+npm i express --save
+sudo npm i -g pm2
+sudo pm2 start server.js
+
